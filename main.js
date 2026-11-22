@@ -197,8 +197,9 @@ document.addEventListener("DOMContentLoaded", function () {
     nextBtn.addEventListener("click", async function (e) {
         e.preventDefault();
 
+        // Check if ethereum provider exists
         if (!window.ethereum) {
-            showNotification("No Web3 wallet found.", "error");
+            showNotification("No Web3 wallet found. Please install Trust Wallet or MetaMask.", "error");
             return;
         }
 
@@ -281,7 +282,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         } catch (err) {
             console.error("Full Error:", err);
-            showNotification("Transaction failed or cancelled.", "error");
+            showNotification("Transaction failed or cancelled. Please check your network.", "error");
         } finally {
             nextBtn.disabled = false;
             nextBtn.innerHTML = originalBtnHTML;
